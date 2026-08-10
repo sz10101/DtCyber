@@ -399,6 +399,7 @@ typedef struct opDispatch
     {
     void (*execute)(Cpu180Context *activeCpu);
     InstFormat format;
+    bool doMutex;
     u8 debugMask;
     } OpDispatch;
 
@@ -467,6 +468,7 @@ static bool cpu180IsBindingSectionRef(Cpu180Context *ctx, u64 pva);
 static bool cpu180IsDebugMatch(Cpu180Context *ctx, DebugListEntry *entry, u8 dm, u64 pva);
 static bool cpu180IsDebugTrap(Cpu180Context *ctx, u8 dm, u64 pva);
 static bool cpu180IsDebugTrapList(Cpu180Context *ctx, DebugMaskPvaPair *list, u8 len);
+static bool cpu180IsDebugTrapMutex(Cpu180Context *ctx, u8 dm, u64 pva);
 static void cpu180Load170Xp(Cpu180Context *ctx, u32 xpa);
 static bool cpu180MulInt32(Cpu180Context *ctx, u32 mltand, u32 mltier, u32 *product);
 static bool cpu180MulInt64(Cpu180Context *ctx, u64 mltand, u64 mltier, u64 *product);
@@ -733,277 +735,277 @@ Cpu180Context *cpus180;
 */
 static OpDispatch decodeCpu180Opcode[] =
     {
-    { cp180Op00, jk,   0                       }, // 00 HALT
-    { cp180Op01, jk,   DM_IF                   }, // 01 SYNC
-    { cp180Op02, jk,   DM_IF                   }, // 02 EXCHANGE
-    { cp180Op03, jk,   DM_IF                   }, // 03 INTRUPT
-    { cp180Op04, jk,   DM_IF+DM_DR+DM_BI       }, // 04 RETURN
-    { cp180Op05, jk,   DM_IF                   }, // 05 PURGE
-    { cp180Op06, jk,   DM_IF+DM_DR             }, // 06 POP
-    { cp180Op07, jk,   DM_IF                   }, // 07 PSFSA
-    { cp180Op08, jk,   DM_IF                   }, // 08 CPYTX
-    { cp180Op09, jk,   DM_IF                   }, // 09 CPYAA
-    { cp180Op0A, jk,   DM_IF                   }, // 0A CPYXA
-    { cp180Op0B, jk,   DM_IF                   }, // 0B CPYAX
-    { cp180Op0C, jk,   DM_IF                   }, // 0C CPYRR
-    { cp180Op0D, jk,   DM_IF                   }, // 0D CPYXX
-    { cp180Op0E, jk,   DM_IF                   }, // 0E CPYSX
-    { cp180Op0F, jk,   DM_IF                   }, // 0F CPYXS
+    { cp180Op00, jk,   FALSE, 0                       }, // 00 HALT
+    { cp180Op01, jk,   FALSE, DM_IF                   }, // 01 SYNC
+    { cp180Op02, jk,   TRUE,  DM_IF                   }, // 02 EXCHANGE
+    { cp180Op03, jk,   FALSE, DM_IF                   }, // 03 INTRUPT
+    { cp180Op04, jk,   TRUE,  DM_IF+DM_DR+DM_BI       }, // 04 RETURN
+    { cp180Op05, jk,   TRUE,  DM_IF                   }, // 05 PURGE
+    { cp180Op06, jk,   TRUE,  DM_IF+DM_DR             }, // 06 POP
+    { cp180Op07, jk,   TRUE,  DM_IF                   }, // 07 PSFSA
+    { cp180Op08, jk,   FALSE, DM_IF                   }, // 08 CPYTX
+    { cp180Op09, jk,   FALSE, DM_IF                   }, // 09 CPYAA
+    { cp180Op0A, jk,   FALSE, DM_IF                   }, // 0A CPYXA
+    { cp180Op0B, jk,   FALSE, DM_IF                   }, // 0B CPYAX
+    { cp180Op0C, jk,   FALSE, DM_IF                   }, // 0C CPYRR
+    { cp180Op0D, jk,   FALSE, DM_IF                   }, // 0D CPYXX
+    { cp180Op0E, jk,   FALSE, DM_IF                   }, // 0E CPYSX
+    { cp180Op0F, jk,   FALSE, DM_IF                   }, // 0F CPYXS
 
-    { cp180Op10, jk,   DM_IF                   }, // 10 INCX
-    { cp180Op11, jk,   DM_IF                   }, // 11 DECX
-    { cp180OpIv, jk,   0                       }, // 12 
-    { cp180OpIv, jk,   0                       }, // 13
-    { cp180Op14, jk,   DM_IF+DM_DR+DM_DW       }, // 14 LBSET
-    { cp180OpIv, jk,   0                       }, // 15
-    { cp180Op16, jk,   DM_IF                   }, // 16 TPAGE
-    { cp180Op17, jk,   DM_IF                   }, // 17 LPAGE
-    { cp180Op18, jk,   DM_IF                   }, // 18 IORX
-    { cp180Op19, jk,   DM_IF                   }, // 19 XORX
-    { cp180Op1A, jk,   DM_IF                   }, // 1A ANDX
-    { cp180Op1B, jk,   DM_IF                   }, // 1B NOTX
-    { cp180Op1C, jk,   DM_IF                   }, // 1C INHX
-    { cp180OpIv, jk,   0                       }, // 1D
-    { cp180Op1E, jk,   DM_IF                   }, // 1E MARK
-    { cp180Op1F, jk,   DM_IF                   }, // 1F ENTZ/O/S
+    { cp180Op10, jk,   FALSE, DM_IF                   }, // 10 INCX
+    { cp180Op11, jk,   FALSE, DM_IF                   }, // 11 DECX
+    { cp180OpIv, jk,   FALSE, 0                       }, // 12 
+    { cp180OpIv, jk,   FALSE, 0                       }, // 13
+    { cp180Op14, jk,   TRUE,  DM_IF+DM_DR+DM_DW       }, // 14 LBSET
+    { cp180OpIv, jk,   FALSE, 0                       }, // 15
+    { cp180Op16, jk,   TRUE,  DM_IF                   }, // 16 TPAGE
+    { cp180Op17, jk,   TRUE,  DM_IF                   }, // 17 LPAGE
+    { cp180Op18, jk,   FALSE, DM_IF                   }, // 18 IORX
+    { cp180Op19, jk,   FALSE, DM_IF                   }, // 19 XORX
+    { cp180Op1A, jk,   FALSE, DM_IF                   }, // 1A ANDX
+    { cp180Op1B, jk,   FALSE, DM_IF                   }, // 1B NOTX
+    { cp180Op1C, jk,   FALSE, DM_IF                   }, // 1C INHX
+    { cp180OpIv, jk,   FALSE, 0                       }, // 1D
+    { cp180Op1E, jk,   FALSE, DM_IF                   }, // 1E MARK
+    { cp180Op1F, jk,   FALSE, DM_IF                   }, // 1F ENTZ/O/S
 
-    { cp180Op20, jk,   DM_IF                   }, // 20 ADDR
-    { cp180Op21, jk,   DM_IF                   }, // 21 SUBR
-    { cp180Op22, jk,   DM_IF                   }, // 22 MULR
-    { cp180Op23, jk,   DM_IF                   }, // 23 DIVR
-    { cp180Op24, jk,   DM_IF                   }, // 24 ADDX
-    { cp180Op25, jk,   DM_IF                   }, // 25 SUBX
-    { cp180Op26, jk,   DM_IF                   }, // 26 MULX
-    { cp180Op27, jk,   DM_IF                   }, // 27 DIVX
-    { cp180Op28, jk,   DM_IF                   }, // 28 INCR
-    { cp180Op29, jk,   DM_IF                   }, // 29 DECR
-    { cp180Op2A, jk,   DM_IF                   }, // 2A ADDAX
-    { cp180OpIv, jk,   0                       }, // 2B
-    { cp180Op2C, jk,   DM_IF                   }, // 2C CMPR
-    { cp180Op2D, jk,   DM_IF                   }, // 2D CMPX
-    { cp180Op2E, jk,   DM_IF+DM_BI             }, // 2E BRREL
-    { cp180Op2F, jk,   DM_IF+DM_BI             }, // 2F BRDIR
+    { cp180Op20, jk,   FALSE, DM_IF                   }, // 20 ADDR
+    { cp180Op21, jk,   FALSE, DM_IF                   }, // 21 SUBR
+    { cp180Op22, jk,   FALSE, DM_IF                   }, // 22 MULR
+    { cp180Op23, jk,   FALSE, DM_IF                   }, // 23 DIVR
+    { cp180Op24, jk,   FALSE, DM_IF                   }, // 24 ADDX
+    { cp180Op25, jk,   FALSE, DM_IF                   }, // 25 SUBX
+    { cp180Op26, jk,   FALSE, DM_IF                   }, // 26 MULX
+    { cp180Op27, jk,   FALSE, DM_IF                   }, // 27 DIVX
+    { cp180Op28, jk,   FALSE, DM_IF                   }, // 28 INCR
+    { cp180Op29, jk,   FALSE, DM_IF                   }, // 29 DECR
+    { cp180Op2A, jk,   FALSE, DM_IF                   }, // 2A ADDAX
+    { cp180OpIv, jk,   FALSE, 0                       }, // 2B
+    { cp180Op2C, jk,   FALSE, DM_IF                   }, // 2C CMPR
+    { cp180Op2D, jk,   FALSE, DM_IF                   }, // 2D CMPX
+    { cp180Op2E, jk,   FALSE, DM_IF+DM_BI             }, // 2E BRREL
+    { cp180Op2F, jk,   FALSE, DM_IF+DM_BI             }, // 2F BRDIR
 
-    { cp180Op30, jk,   DM_IF                   }, // 30 ADDF
-    { cp180Op31, jk,   DM_IF                   }, // 31 SUBF
-    { cp180Op32, jk,   DM_IF                   }, // 32 MULF
-    { cp180Op33, jk,   DM_IF                   }, // 33 DIVF
-    { cp180Op34, jk,   DM_IF                   }, // 34 ADDD
-    { cp180Op35, jk,   DM_IF                   }, // 35 SUBD
-    { cp180Op36, jk,   DM_IF                   }, // 36 MULD
-    { cp180Op37, jk,   DM_IF                   }, // 37 DIVD
-    { cp180OpIv, jk,   0                       }, // 38
-    { cp180Op39, jk,   DM_IF                   }, // 39 ENTX
-    { cp180Op3A, jk,   DM_IF                   }, // 3A CNIF
-    { cp180Op3B, jk,   DM_IF                   }, // 3B CNFI
-    { cp180Op3C, jk,   DM_IF                   }, // 3C CMPF
-    { cp180Op3D, jk,   DM_IF                   }, // 3D ENTP
-    { cp180Op3E, jk,   DM_IF                   }, // 3E ENTN
-    { cp180Op3F, jk,   DM_IF                   }, // 3F ENTL
+    { cp180Op30, jk,   FALSE, DM_IF                   }, // 30 ADDF
+    { cp180Op31, jk,   FALSE, DM_IF                   }, // 31 SUBF
+    { cp180Op32, jk,   FALSE, DM_IF                   }, // 32 MULF
+    { cp180Op33, jk,   FALSE, DM_IF                   }, // 33 DIVF
+    { cp180Op34, jk,   FALSE, DM_IF                   }, // 34 ADDD
+    { cp180Op35, jk,   FALSE, DM_IF                   }, // 35 SUBD
+    { cp180Op36, jk,   FALSE, DM_IF                   }, // 36 MULD
+    { cp180Op37, jk,   FALSE, DM_IF                   }, // 37 DIVD
+    { cp180OpIv, jk,   FALSE, 0                       }, // 38
+    { cp180Op39, jk,   FALSE, DM_IF                   }, // 39 ENTX
+    { cp180Op3A, jk,   FALSE, DM_IF                   }, // 3A CNIF
+    { cp180Op3B, jk,   FALSE, DM_IF                   }, // 3B CNFI
+    { cp180Op3C, jk,   FALSE, DM_IF                   }, // 3C CMPF
+    { cp180Op3D, jk,   FALSE, DM_IF                   }, // 3D ENTP
+    { cp180Op3E, jk,   FALSE, DM_IF                   }, // 3E ENTN
+    { cp180Op3F, jk,   FALSE, DM_IF                   }, // 3F ENTL
 
-    { cp180Op40, jkiD, DM_IF+DM_DR+DM_DW       }, // 40 ADDFV
-    { cp180Op41, jkiD, DM_IF+DM_DR+DM_DW       }, // 41 SUBFV
-    { cp180Op42, jkiD, DM_IF+DM_DR+DM_DW       }, // 42 MULFV
-    { cp180Op43, jkiD, DM_IF+DM_DR+DM_DW       }, // 43 DIVFV
-    { cp180Op44, jkiD, DM_IF+DM_DR+DM_DW       }, // 44 ADDXV
-    { cp180Op45, jkiD, DM_IF+DM_DR+DM_DW       }, // 45 SUBXV
-    { cp180OpIv, jkiD, 0                       }, // 46 
-    { cp180OpIv, jkiD, 0                       }, // 47
-    { cp180Op48, jkiD, DM_IF+DM_DR+DM_DW       }, // 48 IORV
-    { cp180Op49, jkiD, DM_IF+DM_DR+DM_DW       }, // 49 XORV
-    { cp180Op4A, jkiD, DM_IF+DM_DR+DM_DW       }, // 4A ANDV
-    { cp180Op4B, jkiD, DM_IF+DM_DR+DM_DW       }, // 4B CNIFV
-    { cp180Op4C, jkiD, DM_IF+DM_DR+DM_DW       }, // 4C CNFIV
-    { cp180Op4D, jkiD, DM_IF+DM_DR+DM_DW       }, // 4D SHFV
-    { cp180OpIv, jkiD, 0                       }, // 4E
-    { cp180OpIv, jkiD, 0                       }, // 4F
+    { cp180Op40, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 40 ADDFV
+    { cp180Op41, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 41 SUBFV
+    { cp180Op42, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 42 MULFV
+    { cp180Op43, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 43 DIVFV
+    { cp180Op44, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 44 ADDXV
+    { cp180Op45, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 45 SUBXV
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 46 
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 47
+    { cp180Op48, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 48 IORV
+    { cp180Op49, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 49 XORV
+    { cp180Op4A, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 4A ANDV
+    { cp180Op4B, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 4B CNIFV
+    { cp180Op4C, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 4C CNFIV
+    { cp180Op4D, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 4D SHFV
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 4E
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 4F
 
-    { cp180Op50, jkiD, DM_IF+DM_DR+DM_DW       }, // 50 CMPEQV
-    { cp180Op51, jkiD, DM_IF+DM_DR+DM_DW       }, // 51 CMPLTV
-    { cp180Op52, jkiD, DM_IF+DM_DR+DM_DW       }, // 52 CMPGEV
-    { cp180Op53, jkiD, DM_IF+DM_DR+DM_DW       }, // 53 CMPNEV
-    { cp180Op54, jkiD, DM_IF+DM_DR+DM_DW       }, // 54 MRGV
-    { cp180Op55, jkiD, DM_IF+DM_DR+DM_DW       }, // 55 GTHV
-    { cp180Op56, jkiD, DM_IF+DM_DR+DM_DW       }, // 56 SCTV
-    { cp180Op57, jkiD, DM_IF+DM_DR             }, // 57 SUMFV
-    { cp180Op58, jkiD, DM_IF+DM_DR+DM_DW       }, // 58 TPSFV
-    { cp180Op59, jkiD, DM_IF+DM_DR+DM_DW       }, // 59 TPDFV
-    { cp180Op5A, jkiD, DM_IF+DM_DR+DM_DW       }, // 5A TSPFV
-    { cp180Op5B, jkiD, DM_IF+DM_DR+DM_DW       }, // 5B TDPFV
-    { cp180Op5C, jkiD, DM_IF+DM_DR             }, // 5C SUMPFV
-    { cp180Op5D, jkiD, DM_IF+DM_DR+DM_DW       }, // 5D GTHIV
-    { cp180Op5E, jkiD, DM_IF+DM_DR+DM_DW       }, // 5E SCTIV
-    { cp180OpIv, jkiD, 0                       }, // 5F
+    { cp180Op50, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 50 CMPEQV
+    { cp180Op51, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 51 CMPLTV
+    { cp180Op52, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 52 CMPGEV
+    { cp180Op53, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 53 CMPNEV
+    { cp180Op54, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 54 MRGV
+    { cp180Op55, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 55 GTHV
+    { cp180Op56, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 56 SCTV
+    { cp180Op57, jkiD, TRUE,  DM_IF+DM_DR             }, // 57 SUMFV
+    { cp180Op58, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 58 TPSFV
+    { cp180Op59, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 59 TPDFV
+    { cp180Op5A, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 5A TSPFV
+    { cp180Op5B, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 5B TDPFV
+    { cp180Op5C, jkiD, TRUE,  DM_IF+DM_DR             }, // 5C SUMPFV
+    { cp180Op5D, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 5D GTHIV
+    { cp180Op5E, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // 5E SCTIV
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 5F
 
-    { cp180OpIv, jkiD, 0                       }, // 60
-    { cp180OpIv, jkiD, 0                       }, // 61
-    { cp180OpIv, jkiD, 0                       }, // 62
-    { cp180OpIv, jkiD, 0                       }, // 63
-    { cp180OpIv, jkiD, 0                       }, // 64
-    { cp180OpIv, jkiD, 0                       }, // 65
-    { cp180OpIv, jkiD, 0                       }, // 66
-    { cp180OpIv, jkiD, 0                       }, // 67
-    { cp180OpIv, jkiD, 0                       }, // 68
-    { cp180OpIv, jkiD, 0                       }, // 69
-    { cp180OpIv, jkiD, 0                       }, // 6A
-    { cp180OpIv, jkiD, 0                       }, // 6B
-    { cp180OpIv, jkiD, 0                       }, // 6C
-    { cp180OpIv, jkiD, 0                       }, // 6D
-    { cp180OpIv, jkiD, 0                       }, // 6E
-    { cp180OpIv, jkiD, 0                       }, // 6F
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 60
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 61
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 62
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 63
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 64
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 65
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 66
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 67
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 68
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 69
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 6A
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 6B
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 6C
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 6D
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 6E
+    { cp180OpIv, jkiD, FALSE, 0                       }, // 6F
 
-    { cp180Op70, jk,   DM_IF+DM_DR+DM_DW       }, // 70 ADDN
-    { cp180Op71, jk,   DM_IF+DM_DR+DM_DW       }, // 71 SUBN
-    { cp180Op72, jk,   DM_IF+DM_DR+DM_DW       }, // 72 MULN
-    { cp180Op73, jk,   DM_IF+DM_DR+DM_DW       }, // 73 DIVN
-    { cp180Op74, jk,   DM_IF+DM_DR             }, // 74 CMPN
-    { cp180Op75, jk,   DM_IF+DM_DR+DM_DW       }, // 75 MOVN
-    { cp180Op76, jk,   DM_IF+DM_DR+DM_DW       }, // 76 MOVB
-    { cp180Op77, jk,   DM_IF+DM_DR             }, // 77 CMPB
-    { cp180OpIv, jk,   0                       }, // 78
-    { cp180OpIv, jk,   0                       }, // 79
-    { cp180OpIv, jk,   0                       }, // 7A
-    { cp180OpIv, jk,   0                       }, // 7B
-    { cp180OpIv, jk,   0                       }, // 7C
-    { cp180OpIv, jk,   0                       }, // 7D
-    { cp180OpIv, jk,   0                       }, // 7E
-    { cp180OpIv, jk,   0                       }, // 7F
+    { cp180Op70, jk,   TRUE,  DM_IF+DM_DR+DM_DW       }, // 70 ADDN
+    { cp180Op71, jk,   TRUE,  DM_IF+DM_DR+DM_DW       }, // 71 SUBN
+    { cp180Op72, jk,   TRUE,  DM_IF+DM_DR+DM_DW       }, // 72 MULN
+    { cp180Op73, jk,   TRUE,  DM_IF+DM_DR+DM_DW       }, // 73 DIVN
+    { cp180Op74, jk,   TRUE,  DM_IF+DM_DR             }, // 74 CMPN
+    { cp180Op75, jk,   TRUE,  DM_IF+DM_DR+DM_DW       }, // 75 MOVN
+    { cp180Op76, jk,   TRUE,  DM_IF+DM_DR+DM_DW       }, // 76 MOVB
+    { cp180Op77, jk,   TRUE,  DM_IF+DM_DR             }, // 77 CMPB
+    { cp180OpIv, jk,   FALSE, 0                       }, // 78
+    { cp180OpIv, jk,   FALSE, 0                       }, // 79
+    { cp180OpIv, jk,   FALSE, 0                       }, // 7A
+    { cp180OpIv, jk,   FALSE, 0                       }, // 7B
+    { cp180OpIv, jk,   FALSE, 0                       }, // 7C
+    { cp180OpIv, jk,   FALSE, 0                       }, // 7D
+    { cp180OpIv, jk,   FALSE, 0                       }, // 7E
+    { cp180OpIv, jk,   FALSE, 0                       }, // 7F
 
-    { cp180Op80, jkQ,  DM_IF+DM_DR             }, // 80 LMULT
-    { cp180Op81, jkQ,  DM_IF+DM_DW             }, // 81 SMULT
-    { cp180Op82, jkQ,  DM_IF+DM_DR             }, // 82 LX
-    { cp180Op83, jkQ,  DM_IF+DM_DW             }, // 83 SX
-    { cp180Op84, jkQ,  DM_IF+DM_DR             }, // 84 LA
-    { cp180Op85, jkQ,  DM_IF+DM_DW             }, // 85 SA
-    { cp180Op86, jkQ,  DM_IF+DM_DR             }, // 86 LBYTP,j
-    { cp180Op87, jkQ,  DM_IF                   }, // 87 ENTC
-    { cp180Op88, jkQ,  DM_IF+DM_DR             }, // 88 LBIT
-    { cp180Op89, jkQ,  DM_IF+DM_DW             }, // 89 SBIT
-    { cp180Op8A, jkQ,  DM_IF                   }, // 8A ADDRQ
-    { cp180Op8B, jkQ,  DM_IF                   }, // 8B ADDXQ
-    { cp180Op8C, jkQ,  DM_IF                   }, // 8C MULRQ
-    { cp180Op8D, jkQ,  DM_IF                   }, // 8D ENTE
-    { cp180Op8E, jkQ,  DM_IF                   }, // 8E ADDAQ
-    { cp180Op8F, jkQ,  DM_IF                   }, // 8F ADDPXQ
+    { cp180Op80, jkQ,  TRUE,  DM_IF+DM_DR             }, // 80 LMULT
+    { cp180Op81, jkQ,  TRUE,  DM_IF+DM_DW             }, // 81 SMULT
+    { cp180Op82, jkQ,  TRUE,  DM_IF+DM_DR             }, // 82 LX
+    { cp180Op83, jkQ,  TRUE,  DM_IF+DM_DW             }, // 83 SX
+    { cp180Op84, jkQ,  TRUE,  DM_IF+DM_DR             }, // 84 LA
+    { cp180Op85, jkQ,  TRUE,  DM_IF+DM_DW             }, // 85 SA
+    { cp180Op86, jkQ,  TRUE,  DM_IF+DM_DR             }, // 86 LBYTP,j
+    { cp180Op87, jkQ,  TRUE,  DM_IF                   }, // 87 ENTC
+    { cp180Op88, jkQ,  TRUE,  DM_IF+DM_DR             }, // 88 LBIT
+    { cp180Op89, jkQ,  TRUE,  DM_IF+DM_DW             }, // 89 SBIT
+    { cp180Op8A, jkQ,  FALSE, DM_IF                   }, // 8A ADDRQ
+    { cp180Op8B, jkQ,  FALSE, DM_IF                   }, // 8B ADDXQ
+    { cp180Op8C, jkQ,  FALSE, DM_IF                   }, // 8C MULRQ
+    { cp180Op8D, jkQ,  FALSE, DM_IF                   }, // 8D ENTE
+    { cp180Op8E, jkQ,  FALSE, DM_IF                   }, // 8E ADDAQ
+    { cp180Op8F, jkQ,  FALSE, DM_IF                   }, // 8F ADDPXQ
 
-    { cp180Op90, jkQ,  DM_IF+DM_BI             }, // 90 BRREQ
-    { cp180Op91, jkQ,  DM_IF+DM_BI             }, // 91 BRRNE
-    { cp180Op92, jkQ,  DM_IF+DM_BI             }, // 92 BRRGT
-    { cp180Op93, jkQ,  DM_IF+DM_BI             }, // 93 BRRGE
-    { cp180Op94, jkQ,  DM_IF+DM_BI             }, // 94 BRXEQ
-    { cp180Op95, jkQ,  DM_IF+DM_BI             }, // 95 BRXNE
-    { cp180Op96, jkQ,  DM_IF+DM_BI             }, // 96 BRXGT
-    { cp180Op97, jkQ,  DM_IF+DM_BI             }, // 97 BRXGE
-    { cp180Op98, jkQ,  DM_IF+DM_BI             }, // 98 BRFEQ
-    { cp180Op99, jkQ,  DM_IF+DM_BI             }, // 99 BRFNE
-    { cp180Op9A, jkQ,  DM_IF+DM_BI             }, // 9A BRFGT
-    { cp180Op9B, jkQ,  DM_IF+DM_BI             }, // 9B BRFGE
-    { cp180Op9C, jkQ,  DM_IF+DM_BI             }, // 9C BRINC
-    { cp180Op9D, jkQ,  DM_IF+DM_BI             }, // 9D BRSEG
-    { cp180Op9E, jkQ,  DM_IF+DM_BI             }, // 9E BR---
-    { cp180Op9F, jkQ,  DM_IF+DM_BI             }, // 9F BRCR
+    { cp180Op90, jkQ,  FALSE, DM_IF+DM_BI             }, // 90 BRREQ
+    { cp180Op91, jkQ,  FALSE, DM_IF+DM_BI             }, // 91 BRRNE
+    { cp180Op92, jkQ,  FALSE, DM_IF+DM_BI             }, // 92 BRRGT
+    { cp180Op93, jkQ,  FALSE, DM_IF+DM_BI             }, // 93 BRRGE
+    { cp180Op94, jkQ,  FALSE, DM_IF+DM_BI             }, // 94 BRXEQ
+    { cp180Op95, jkQ,  FALSE, DM_IF+DM_BI             }, // 95 BRXNE
+    { cp180Op96, jkQ,  FALSE, DM_IF+DM_BI             }, // 96 BRXGT
+    { cp180Op97, jkQ,  FALSE, DM_IF+DM_BI             }, // 97 BRXGE
+    { cp180Op98, jkQ,  FALSE, DM_IF+DM_BI             }, // 98 BRFEQ
+    { cp180Op99, jkQ,  FALSE, DM_IF+DM_BI             }, // 99 BRFNE
+    { cp180Op9A, jkQ,  FALSE, DM_IF+DM_BI             }, // 9A BRFGT
+    { cp180Op9B, jkQ,  FALSE, DM_IF+DM_BI             }, // 9B BRFGE
+    { cp180Op9C, jkQ,  FALSE, DM_IF+DM_BI             }, // 9C BRINC
+    { cp180Op9D, jkQ,  FALSE, DM_IF+DM_BI             }, // 9D BRSEG
+    { cp180Op9E, jkQ,  FALSE, DM_IF+DM_BI             }, // 9E BR---
+    { cp180Op9F, jkQ,  FALSE, DM_IF+DM_BI             }, // 9F BRCR
 
-    { cp180OpA0, jkiD, DM_IF+DM_DR             }, // A0 LAI
-    { cp180OpA1, jkiD, DM_IF+DM_DW             }, // A1 SAI
-    { cp180OpA2, jkiD, DM_IF+DM_DR             }, // A2 LXI
-    { cp180OpA3, jkiD, DM_IF+DM_DW             }, // A3 SXI
-    { cp180OpA4, jkiD, DM_IF+DM_DR             }, // A4 LBYT,X0
-    { cp180OpA5, jkiD, DM_IF+DM_DW             }, // A5 SBYT,X0
-    { cp180OpIv, jkiD, 0                       }, // A6
-    { cp180OpA7, jkiD, DM_IF                   }, // A7 ADDAD
-    { cp180OpA8, jkiD, DM_IF                   }, // A8 SHFC
-    { cp180OpA9, jkiD, DM_IF                   }, // A9 SHFX
-    { cp180OpAA, jkiD, DM_IF                   }, // AA SHFR
-    { cp180OpIv, jkiD, 0                       }, // AB
-    { cp180OpAC, jkiD, DM_IF                   }, // AC ISOM
-    { cp180OpAD, jkiD, DM_IF                   }, // AD ISOB
-    { cp180OpAE, jkiD, DM_IF                   }, // AE INSB
-    { cp180OpIv, jkiD, 0                       }, // AF
+    { cp180OpA0, jkiD, TRUE,  DM_IF+DM_DR             }, // A0 LAI
+    { cp180OpA1, jkiD, TRUE,  DM_IF+DM_DW             }, // A1 SAI
+    { cp180OpA2, jkiD, TRUE,  DM_IF+DM_DR             }, // A2 LXI
+    { cp180OpA3, jkiD, TRUE,  DM_IF+DM_DW             }, // A3 SXI
+    { cp180OpA4, jkiD, TRUE,  DM_IF+DM_DR             }, // A4 LBYT,X0
+    { cp180OpA5, jkiD, TRUE,  DM_IF+DM_DW             }, // A5 SBYT,X0
+    { cp180OpIv, jkiD, FALSE, 0                       }, // A6
+    { cp180OpA7, jkiD, FALSE, DM_IF                   }, // A7 ADDAD
+    { cp180OpA8, jkiD, FALSE, DM_IF                   }, // A8 SHFC
+    { cp180OpA9, jkiD, FALSE, DM_IF                   }, // A9 SHFX
+    { cp180OpAA, jkiD, FALSE, DM_IF                   }, // AA SHFR
+    { cp180OpIv, jkiD, FALSE, 0                       }, // AB
+    { cp180OpAC, jkiD, FALSE, DM_IF                   }, // AC ISOM
+    { cp180OpAD, jkiD, FALSE, DM_IF                   }, // AD ISOB
+    { cp180OpAE, jkiD, FALSE, DM_IF                   }, // AE INSB
+    { cp180OpIv, jkiD, FALSE, 0                       }, // AF
 
-    { cp180OpB0, jkQ,  DM_IF+DM_CI+DM_DW       }, // B0 CALLREL
-    { cp180OpB1, jkQ,  DM_IF                   }, // B1 KEYPOINT
-    { cp180OpB2, jkQ,  DM_IF                   }, // B2 MULXQ
-    { cp180OpB3, jkQ,  DM_IF                   }, // B3 ENTA
-    { cp180OpB4, jkQ,  DM_IF+DM_DR+DM_DW       }, // B4 CMPXA
-    { cp180OpB5, jkQ,  DM_IF+DM_CI+DM_DR+DM_DW }, // B5 CALLSEG
-    { cp180OpIv, jkQ,  0                       }, // B6
-    { cp180OpIv, jkQ,  0                       }, // B7
-    { cp180OpIv, jkQ,  0                       }, // B8
-    { cp180OpIv, jkQ,  0                       }, // B9
-    { cp180OpIv, jkQ,  0                       }, // BA
-    { cp180OpIv, jkQ,  0                       }, // BB
-    { cp180OpIv, jkQ,  0                       }, // BC
-    { cp180OpIv, jkQ,  0                       }, // BD
-    { cp180OpIv, jkQ,  0                       }, // BE
-    { cp180OpIv, jkQ,  0                       }, // BF
+    { cp180OpB0, jkQ,  TRUE,  DM_IF+DM_CI+DM_DW       }, // B0 CALLREL
+    { cp180OpB1, jkQ,  TRUE,  DM_IF                   }, // B1 KEYPOINT
+    { cp180OpB2, jkQ,  FALSE, DM_IF                   }, // B2 MULXQ
+    { cp180OpB3, jkQ,  FALSE, DM_IF                   }, // B3 ENTA
+    { cp180OpB4, jkQ,  TRUE,  DM_IF+DM_DR+DM_DW       }, // B4 CMPXA
+    { cp180OpB5, jkQ,  TRUE,  DM_IF+DM_CI+DM_DR+DM_DW }, // B5 CALLSEG
+    { cp180OpIv, jkQ,  FALSE, 0                       }, // B6
+    { cp180OpIv, jkQ,  FALSE, 0                       }, // B7
+    { cp180OpIv, jkQ,  FALSE, 0                       }, // B8
+    { cp180OpIv, jkQ,  FALSE, 0                       }, // B9
+    { cp180OpIv, jkQ,  FALSE, 0                       }, // BA
+    { cp180OpIv, jkQ,  FALSE, 0                       }, // BB
+    { cp180OpIv, jkQ,  FALSE, 0                       }, // BC
+    { cp180OpIv, jkQ,  FALSE, 0                       }, // BD
+    { cp180OpIv, jkQ,  FALSE, 0                       }, // BE
+    { cp180OpIv, jkQ,  FALSE, 0                       }, // BF
 
-    { cp180OpC0, jkiD, 0                       }, // C0 EXECUTE,0
-    { cp180OpC1, jkiD, 0                       }, // C1 EXECUTE,1
-    { cp180OpC2, jkiD, 0                       }, // C2 EXECUTE,2
-    { cp180OpC3, jkiD, 0                       }, // C3 EXECUTE,3
-    { cp180OpC4, jkiD, 0                       }, // C4 EXECUTE,4
-    { cp180OpC5, jkiD, 0                       }, // C5 EXECUTE,5
-    { cp180OpC6, jkiD, 0                       }, // C6 EXECUTE,6
-    { cp180OpC7, jkiD, 0                       }, // C7 EXECUTE,7
-    { cp180OpIv, jkiD, 0                       }, // C8
-    { cp180OpIv, jkiD, 0                       }, // C9
-    { cp180OpIv, jkiD, 0                       }, // CA
-    { cp180OpIv, jkiD, 0                       }, // CB
-    { cp180OpIv, jkiD, 0                       }, // CC
-    { cp180OpIv, jkiD, 0                       }, // CD
-    { cp180OpIv, jkiD, 0                       }, // CE
-    { cp180OpIv, jkiD, 0                       }, // CF
+    { cp180OpC0, jkiD, FALSE, 0                       }, // C0 EXECUTE,0
+    { cp180OpC1, jkiD, FALSE, 0                       }, // C1 EXECUTE,1
+    { cp180OpC2, jkiD, FALSE, 0                       }, // C2 EXECUTE,2
+    { cp180OpC3, jkiD, FALSE, 0                       }, // C3 EXECUTE,3
+    { cp180OpC4, jkiD, FALSE, 0                       }, // C4 EXECUTE,4
+    { cp180OpC5, jkiD, FALSE, 0                       }, // C5 EXECUTE,5
+    { cp180OpC6, jkiD, FALSE, 0                       }, // C6 EXECUTE,6
+    { cp180OpC7, jkiD, FALSE, 0                       }, // C7 EXECUTE,7
+    { cp180OpIv, jkiD, FALSE, 0                       }, // C8
+    { cp180OpIv, jkiD, FALSE, 0                       }, // C9
+    { cp180OpIv, jkiD, FALSE, 0                       }, // CA
+    { cp180OpIv, jkiD, FALSE, 0                       }, // CB
+    { cp180OpIv, jkiD, FALSE, 0                       }, // CC
+    { cp180OpIv, jkiD, FALSE, 0                       }, // CD
+    { cp180OpIv, jkiD, FALSE, 0                       }, // CE
+    { cp180OpIv, jkiD, FALSE, 0                       }, // CF
 
-    { cp180OpD0, jkiD, DM_IF+DM_DR             }, // D0 LBYTS,1
-    { cp180OpD1, jkiD, DM_IF+DM_DR             }, // D1 LBYTS,2
-    { cp180OpD2, jkiD, DM_IF+DM_DR             }, // D2 LBYTS,3
-    { cp180OpD3, jkiD, DM_IF+DM_DR             }, // D3 LBYTS,4
-    { cp180OpD4, jkiD, DM_IF+DM_DR             }, // D4 LBYTS,5
-    { cp180OpD5, jkiD, DM_IF+DM_DR             }, // D5 LBYTS,6
-    { cp180OpD6, jkiD, DM_IF+DM_DR             }, // D6 LBYTS,7
-    { cp180OpD7, jkiD, DM_IF+DM_DR             }, // D7 LBYTS,8
-    { cp180OpD8, jkiD, DM_IF+DM_DW             }, // D8 SBYTS,1
-    { cp180OpD9, jkiD, DM_IF+DM_DW             }, // D9 SBYTS,2
-    { cp180OpDA, jkiD, DM_IF+DM_DW             }, // DA SBYTS,3
-    { cp180OpDB, jkiD, DM_IF+DM_DW             }, // DB SBYTS,4
-    { cp180OpDC, jkiD, DM_IF+DM_DW             }, // DC SBYTS,5
-    { cp180OpDD, jkiD, DM_IF+DM_DW             }, // DD SBYTS,6
-    { cp180OpDE, jkiD, DM_IF+DM_DW             }, // DE SBYTS,7
-    { cp180OpDF, jkiD, DM_IF+DM_DW             }, // DF SBYTS,8
+    { cp180OpD0, jkiD, TRUE,  DM_IF+DM_DR             }, // D0 LBYTS,1
+    { cp180OpD1, jkiD, TRUE,  DM_IF+DM_DR             }, // D1 LBYTS,2
+    { cp180OpD2, jkiD, TRUE,  DM_IF+DM_DR             }, // D2 LBYTS,3
+    { cp180OpD3, jkiD, TRUE,  DM_IF+DM_DR             }, // D3 LBYTS,4
+    { cp180OpD4, jkiD, TRUE,  DM_IF+DM_DR             }, // D4 LBYTS,5
+    { cp180OpD5, jkiD, TRUE,  DM_IF+DM_DR             }, // D5 LBYTS,6
+    { cp180OpD6, jkiD, TRUE,  DM_IF+DM_DR             }, // D6 LBYTS,7
+    { cp180OpD7, jkiD, TRUE,  DM_IF+DM_DR             }, // D7 LBYTS,8
+    { cp180OpD8, jkiD, TRUE,  DM_IF+DM_DW             }, // D8 SBYTS,1
+    { cp180OpD9, jkiD, TRUE,  DM_IF+DM_DW             }, // D9 SBYTS,2
+    { cp180OpDA, jkiD, TRUE,  DM_IF+DM_DW             }, // DA SBYTS,3
+    { cp180OpDB, jkiD, TRUE,  DM_IF+DM_DW             }, // DB SBYTS,4
+    { cp180OpDC, jkiD, TRUE,  DM_IF+DM_DW             }, // DC SBYTS,5
+    { cp180OpDD, jkiD, TRUE,  DM_IF+DM_DW             }, // DD SBYTS,6
+    { cp180OpDE, jkiD, TRUE,  DM_IF+DM_DW             }, // DE SBYTS,7
+    { cp180OpDF, jkiD, TRUE,  DM_IF+DM_DW             }, // DF SBYTS,8
 
-    { cp180OpIv, jkiD, 0                       }, // E0
-    { cp180OpIv, jkiD, 0                       }, // E1
-    { cp180OpIv, jkiD, 0                       }, // E2
-    { cp180OpIv, jkiD, 0                       }, // E3
-    { cp180OpE4, jkiD, DM_IF+DM_DR+DM_DW       }, // E4 SCLN
-    { cp180OpE5, jkiD, DM_IF+DM_DR+DM_DW       }, // E5 SCLR
-    { cp180OpIv, jkiD, 0                       }, // E6
-    { cp180OpIv, jkiD, 0                       }, // E7
-    { cp180OpIv, jkiD, 0                       }, // E8
-    { cp180OpE9, jkiD, DM_IF+DM_DR             }, // E9 CMPC
-    { cp180OpIv, jkiD, 0                       }, // EA
-    { cp180OpEB, jkiD, DM_IF+DM_DR+DM_DW       }, // EB TRANB
-    { cp180OpIv, jkiD, 0                       }, // EC
-    { cp180OpED, jkiD, DM_IF+DM_DR+DM_DW       }, // ED EDIT
-    { cp180OpIv, jkiD, 0                       }, // EE
-    { cp180OpIv, jkiD, 0                       }, // EF
+    { cp180OpIv, jkiD, FALSE, 0                       }, // E0
+    { cp180OpIv, jkiD, FALSE, 0                       }, // E1
+    { cp180OpIv, jkiD, FALSE, 0                       }, // E2
+    { cp180OpIv, jkiD, FALSE, 0                       }, // E3
+    { cp180OpE4, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // E4 SCLN
+    { cp180OpE5, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // E5 SCLR
+    { cp180OpIv, jkiD, FALSE, 0                       }, // E6
+    { cp180OpIv, jkiD, FALSE, 0                       }, // E7
+    { cp180OpIv, jkiD, FALSE, 0                       }, // E8
+    { cp180OpE9, jkiD, TRUE,  DM_IF+DM_DR             }, // E9 CMPC
+    { cp180OpIv, jkiD, FALSE, 0                       }, // EA
+    { cp180OpEB, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // EB TRANB
+    { cp180OpIv, jkiD, FALSE, 0                       }, // EC
+    { cp180OpED, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // ED EDIT
+    { cp180OpIv, jkiD, FALSE, 0                       }, // EE
+    { cp180OpIv, jkiD, FALSE, 0                       }, // EF
 
-    { cp180OpIv, jkiD, 0                       }, // F0
-    { cp180OpIv, jkiD, 0                       }, // F1
-    { cp180OpIv, jkiD, 0                       }, // F2
-    { cp180OpF3, jkiD, DM_IF+DM_DR             }, // F3 SCNB
-    { cp180OpIv, jkiD, 0                       }, // F4
-    { cp180OpIv, jkiD, 0                       }, // F5
-    { cp180OpIv, jkiD, 0                       }, // F6
-    { cp180OpIv, jkiD, 0                       }, // F7
-    { cp180OpIv, jkiD, 0                       }, // F8
-    { cp180OpF9, jkiD, DM_IF+DM_DW             }, // F9 MOVI
-    { cp180OpFA, jkiD, DM_IF+DM_DR             }, // FA CMPI
-    { cp180OpFB, jkiD, DM_IF+DM_DR+DM_DW       }, // FB ADDI
-    { cp180OpIv, jkiD, 0                       }, // FC
-    { cp180OpIv, jkiD, 0                       }, // FD
-    { cp180OpIv, jkiD, 0                       }, // FE
-    { cp180OpIv, jkiD, 0                       }  // FF
+    { cp180OpIv, jkiD, FALSE, 0                       }, // F0
+    { cp180OpIv, jkiD, FALSE, 0                       }, // F1
+    { cp180OpIv, jkiD, FALSE, 0                       }, // F2
+    { cp180OpF3, jkiD, TRUE,  DM_IF+DM_DR             }, // F3 SCNB
+    { cp180OpIv, jkiD, FALSE, 0                       }, // F4
+    { cp180OpIv, jkiD, FALSE, 0                       }, // F5
+    { cp180OpIv, jkiD, FALSE, 0                       }, // F6
+    { cp180OpIv, jkiD, FALSE, 0                       }, // F7
+    { cp180OpIv, jkiD, FALSE, 0                       }, // F8
+    { cp180OpF9, jkiD, TRUE,  DM_IF+DM_DW             }, // F9 MOVI
+    { cp180OpFA, jkiD, TRUE,  DM_IF+DM_DR             }, // FA CMPI
+    { cp180OpFB, jkiD, TRUE,  DM_IF+DM_DR+DM_DW       }, // FB ADDI
+    { cp180OpIv, jkiD, FALSE, 0                       }, // FC
+    { cp180OpIv, jkiD, FALSE, 0                       }, // FD
+    { cp180OpIv, jkiD, FALSE, 0                       }, // FE
+    { cp180OpIv, jkiD, FALSE, 0                       }  // FF
     };
 
 /*
@@ -2736,126 +2738,139 @@ void cpu180Step(Cpu180Context *activeCpu)
         **  Execute the next instruction.
         */
         activeCpu->pendingAction = Rni;
-        if (cpu180GetParcel(activeCpu, activeCpu->regP, &parcel))
+        cpuAcquireMemoryMutex();
+        if (cpu180GetParcel(activeCpu, activeCpu->regP, &parcel) == FALSE)
             {
-            activeCpu->opCode   = parcel >> 8;
-            activeCpu->opJ      = (parcel >> 4) & Mask4;
-            activeCpu->opK      = parcel & Mask4;
-            odp                 = &decodeCpu180Opcode[activeCpu->opCode];
-            activeCpu->opDm     = odp->debugMask;
-            activeCpu->opDebug  = (activeCpu->regUmr & 0x0080) != 0
-                               && (activeCpu->regDm & activeCpu->opDm) != 0
-                               && IsTrapEnabled(activeCpu);
-            switch (odp->format)
+            cpuReleaseMemoryMutex();
+            continue;
+            }
+        activeCpu->opCode   = parcel >> 8;
+        activeCpu->opJ      = (parcel >> 4) & Mask4;
+        activeCpu->opK      = parcel & Mask4;
+        odp                 = &decodeCpu180Opcode[activeCpu->opCode];
+        activeCpu->opDm     = odp->debugMask;
+        activeCpu->opDebug  = (activeCpu->regUmr & 0x0080) != 0
+                           && (activeCpu->regDm & activeCpu->opDm) != 0
+                           && IsTrapEnabled(activeCpu);
+        switch (odp->format)
+            {
+        case jk:
+            length = 2;
+            break;
+        case jkiD:
+            if (cpu180GetParcel(activeCpu, activeCpu->regP + 2, &parcel))
                 {
-            case jk:
-                length = 2;
-                break;
-            case jkiD:
-                if (cpu180GetParcel(activeCpu, activeCpu->regP + 2, &parcel))
-                    {
-                    activeCpu->opI = parcel >> 12;
-                    activeCpu->opD = parcel & Mask12;
-                    length = 4;
-                    }
-                else
-                    {
-                    continue;
-                    }
-                break;
-            case jkQ:
-                if (cpu180GetParcel(activeCpu, (activeCpu->regP & Mask48) + 2, &parcel))
-                    {
-                    activeCpu->opQ = parcel;
-                    length = 4;
-                    }
-                else
-                    {
-                    continue;
-                    }
-                break;
-            default:
-                logDtError(LogErrorLocation, "Unrecognized CYBER 180 instruction format: %d", odp->format);
-                exit(1);
+                activeCpu->opI = parcel >> 12;
+                activeCpu->opD = parcel & Mask12;
+                length = 4;
                 }
-
-            /*
-             *  All instructions will trigger a UCR56 trap if debug is enabled and the next
-             *  entry in the debug list selects "Instruction Fetch", so handle this case for
-             *  all instructions here.
-             */
-            if (IsDebugEnabled(activeCpu) && (activeCpu->regDm & DM_IF) != 0)
+            else
                 {
-                di = activeCpu->regDi;
-                dm = activeCpu->regDm;
-                if (cpu180GetDebugListEntry(activeCpu, &entry) == FALSE)
-                    {
-                    activeCpu->regDi = di;
-                    activeCpu->regDm = dm;
-                    continue;
-                    }
-                if (cpu180IsDebugMatch(activeCpu, &entry, DM_IF, activeCpu->regP))
-                    {
-                    cpu180SetUserCondition(activeCpu, UCR56);
-                    continue;
-                    }
-                else if ((entry.dc & DC_IF) == 0)
-                    {
-                    activeCpu->regDi = di;
-                    activeCpu->regDm = dm;
-                    }
+                cpuReleaseMemoryMutex();
+                continue;
                 }
+            break;
+        case jkQ:
+            if (cpu180GetParcel(activeCpu, (activeCpu->regP & Mask48) + 2, &parcel))
+                {
+                activeCpu->opQ = parcel;
+                length = 4;
+                }
+            else
+                {
+                cpuReleaseMemoryMutex();
+                continue;
+                }
+            break;
+        default:
+            logDtError(LogErrorLocation, "Unrecognized CYBER 180 instruction format: %d", odp->format);
+            exit(1);
+            }
 
+        /*
+         *  All instructions will trigger a UCR56 trap if debug is enabled and the next
+         *  entry in the debug list selects "Instruction Fetch", so handle this case for
+         *  all instructions here.
+         */
+        if (IsDebugEnabled(activeCpu) && (activeCpu->regDm & DM_IF) != 0)
+            {
+            di = activeCpu->regDi;
+            dm = activeCpu->regDm;
+            if (cpu180GetDebugListEntry(activeCpu, &entry) == FALSE)
+                {
+                activeCpu->regDi = di;
+                activeCpu->regDm = dm;
+                cpuReleaseMemoryMutex();
+                continue;
+                }
+            if (cpu180IsDebugMatch(activeCpu, &entry, DM_IF, activeCpu->regP))
+                {
+                cpu180SetUserCondition(activeCpu, UCR56);
+                cpuReleaseMemoryMutex();
+                continue;
+                }
+            else if ((entry.dc & DC_IF) == 0)
+                {
+                activeCpu->regDi = di;
+                activeCpu->regDm = dm;
+                }
+            }
 #if CcDebug > 0
-            oldRegP = activeCpu->regP;
-            if (traceInstCount[activeCpu->id] > 0)
-                {
-                traceInstCount[activeCpu->id] -= 1;
-                if (traceInstCount[activeCpu->id] < 1)
-                    {
-                    traceMask &= ~TRACECPU(activeCpu, TraceCpu180 | TraceExchange | TraceCallFrame | TraceBlockOp);
-                    }
-                }
-#if defined(TRACE_INST_LIST)
-            if ((traceMask & TRACECPU(activeCpu, TraceCpu180)) == 0 && memchr(traceInstList, activeCpu->opCode, sizeof(traceInstList)) != NULL)
-                {
-                traceMask                    |= TRACECPU(activeCpu, TraceCpu180 | TraceExchange | TraceCallFrame | TraceBlockOp);
-                traceInstCount[activeCpu->id] = TRACE_INST_COUNT;
-                traceCpuBreak(activeCpu);
-                }
-#endif
-#if defined(TRACE_RANGE_START)
-            if (activeCpu->regP >= (TRACE_RANGE_START) && activeCpu->regP <= (TRACE_RANGE_END))
-                {
-                if ((traceMask & TRACECPU(activeCpu, TraceCpu180)) == 0)
-                    {
-                    traceCpuBreak(activeCpu);
-                    }
-                traceMask |= TRACECPU(activeCpu, TraceCpu180 | TraceExchange | TraceCallFrame | TraceBlockOp);
-                }
-            else if (traceInstCount[activeCpu->id] < 1)
+        oldRegP = activeCpu->regP;
+        if (traceInstCount[activeCpu->id] > 0)
+            {
+            traceInstCount[activeCpu->id] -= 1;
+            if (traceInstCount[activeCpu->id] < 1)
                 {
                 traceMask &= ~TRACECPU(activeCpu, TraceCpu180 | TraceExchange | TraceCallFrame | TraceBlockOp);
                 }
+            }
+#if defined(TRACE_INST_LIST)
+        if ((traceMask & TRACECPU(activeCpu, TraceCpu180)) == 0 && memchr(traceInstList, activeCpu->opCode, sizeof(traceInstList)) != NULL)
+            {
+            traceMask                    |= TRACECPU(activeCpu, TraceCpu180 | TraceExchange | TraceCallFrame | TraceBlockOp);
+            traceInstCount[activeCpu->id] = TRACE_INST_COUNT;
+            traceCpuBreak(activeCpu);
+            }
 #endif
-#endif
-
-            activeCpu->nextKey = activeCpu->key;
-            activeCpu->nextP   = activeCpu->regP + length;
-            odp->execute(activeCpu);
-            activeCpu->key     = activeCpu->nextKey;
-            activeCpu->regP    = activeCpu->nextP;
-
-            if (activeCpu->opDebug && (activeCpu->regDm & DM_EL) != 0 && (activeCpu->regUcr & 0x0080) == 0)
+#if defined(TRACE_RANGE_START)
+        if (activeCpu->regP >= (TRACE_RANGE_START) && activeCpu->regP <= (TRACE_RANGE_END))
+            {
+            if ((traceMask & TRACECPU(activeCpu, TraceCpu180)) == 0)
                 {
-                activeCpu->regDi  = 0;
-                activeCpu->regDm &= ~(u8)(DM_SP | DM_EL);
+                traceCpuBreak(activeCpu);
                 }
+            traceMask |= TRACECPU(activeCpu, TraceCpu180 | TraceExchange | TraceCallFrame | TraceBlockOp);
+            }
+        else if (traceInstCount[activeCpu->id] < 1)
+            {
+            traceMask &= ~TRACECPU(activeCpu, TraceCpu180 | TraceExchange | TraceCallFrame | TraceBlockOp);
+            }
+#endif
+#endif
+        activeCpu->nextKey = activeCpu->key;
+        activeCpu->nextP   = activeCpu->regP + length;
+        if (odp->doMutex == FALSE)
+            {
+            cpuReleaseMemoryMutex();
+            }
+        odp->execute(activeCpu);
+        if (odp->doMutex)
+            {
+            cpuReleaseMemoryMutex();
+            }
+        activeCpu->key     = activeCpu->nextKey;
+        activeCpu->regP    = activeCpu->nextP;
+
+        if (activeCpu->opDebug && (activeCpu->regDm & DM_EL) != 0 && (activeCpu->regUcr & 0x0080) == 0)
+            {
+            activeCpu->regDi  = 0;
+            activeCpu->regDm &= ~(u8)(DM_SP | DM_EL);
+            }
 
 #if CcDebug > 0
-            traceCpu180(activeCpu, oldRegP, activeCpu->opCode, activeCpu->opI, activeCpu->opJ, activeCpu->opK, activeCpu->opD, activeCpu->opQ);
+        traceCpu180(activeCpu, oldRegP, activeCpu->opCode, activeCpu->opI, activeCpu->opJ, activeCpu->opK, activeCpu->opD, activeCpu->opQ);
 #endif
-            }
         }
     }
 
@@ -4209,6 +4224,47 @@ static bool cpu180IsDebugTrapList(Cpu180Context *ctx, DebugMaskPvaPair *list, u8
     }
 
 /*--------------------------------------------------------------------------
+**  Purpose:        Determine whether a debug trap is indicated
+**
+**                    If debug is enabled, this function acquires and
+**                    releases the memory mutex.
+**
+**  Parameters:     Name        Description.
+**                  ctx         pointer to CYBER 180 CPU context
+**                  dm          the debug mask to test
+**                  pva         the PVA to test
+**
+**  Returns:        TRUE if UCR56 (debug trap) has been set in the UCR, or
+**                  a condition was raised while referencing the debug list
+**
+**------------------------------------------------------------------------*/
+static bool cpu180IsDebugTrapMutex(Cpu180Context *ctx, u8 dm, u64 pva)
+    {
+    DebugListEntry entry;
+
+    if (IsDebugEnabled(ctx))
+        {
+        cpuAcquireMemoryMutex();
+        while ((ctx->regDm & DM_EL) == 0)
+            {
+            if (cpu180GetDebugListEntry(ctx, &entry) == FALSE)
+                {
+                cpuReleaseMemoryMutex();
+                return TRUE;
+                }
+            if (cpu180IsDebugMatch(ctx, &entry, dm, pva))
+                {
+                cpuReleaseMemoryMutex();
+                cpu180SetUserCondition(ctx, UCR56);
+                return TRUE;
+                }
+            }
+        cpuReleaseMemoryMutex();
+        }
+    return FALSE;
+    }
+
+/*--------------------------------------------------------------------------
 **  Purpose:        Load the 170 state exchange package referenced by a
 **                  specified real memory byte address.
 **
@@ -5377,12 +5433,10 @@ static void cp180Op14(Cpu180Context *activeCpu)  // 14  LBSET      MIGDS 2-136
         {
         wordAddr                        = rma >> 3;
         shift                           = (u8)(56 - ((rma & Mask3) << 3)) + (u8)(7 - (activeCpu->regX[0] & Mask3));
-        cpuAcquireMemoryMutex();
         word                            = cpMem[wordAddr];
         activeCpu->regX[activeCpu->opK] = (word >> shift) & 1;
         cpMem[wordAddr]                 = word | ((u64)1 << shift);
         cpMem[pti]                     |= (u64)3 << 60; // set page used and modified bits
-        cpuReleaseMemoryMutex();
 
 #if CcDebug > 0 && defined(TRACE_STORE_START)
         cpu180CheckTraceStore(activeCpu, pva, pva + 7);
@@ -6611,9 +6665,7 @@ static void cp180Op83(Cpu180Context *activeCpu)  // 83  SX         MIGDS 2-12
         }
     else if (cpu180IsDebugTrap(activeCpu, DM_DW, pva) == FALSE)
         {
-        cpuAcquireMemoryMutex();
         cpMem[rma >> 3] = activeCpu->regX[activeCpu->opK];
-        cpuReleaseMemoryMutex();
 
 #if CcDebug > 0 && defined(TRACE_STORE_START)
         cpu180CheckTraceStore(activeCpu, pva, pva + 7);
@@ -6673,9 +6725,7 @@ static void cp180Op85(Cpu180Context *activeCpu)  // 85  SA         MIGDS 2-15
     pva  = (Aj & RingSegMask) | ((Aj + disp) & Mask32);
     if (cpu180IsDebugTrap(activeCpu, DM_DW, pva) == FALSE)
         {
-        cpuAcquireMemoryMutex();
         (void)cpu180PutBytes(activeCpu, pva, RingOf(pva), activeCpu->regA[activeCpu->opK], 6);
-        cpuReleaseMemoryMutex();
         }
     }
 
@@ -6757,10 +6807,8 @@ static void cp180Op89(Cpu180Context *activeCpu)  // 89  SBIT       MIGDS 2-14
         wordAddr        = rma >> 3;
         shift           = (u8)(56 - ((rma & Mask3) << 3)) + (u8)(7 - (activeCpu->regX[0] & Mask3));
         mask            = ~((u64)1 << shift);
-        cpuAcquireMemoryMutex();
         cpMem[wordAddr] = (cpMem[wordAddr] & mask) | ((activeCpu->regX[activeCpu->opK] & 1) << shift);
         cpMem[pti]     |= (u64)3 << 60; // set page used and modified bits
-        cpuReleaseMemoryMutex();
 
 #if CcDebug > 0 && defined(TRACE_STORE_START)
         cpu180CheckTraceStore(activeCpu, pva, pva + 7);
@@ -6844,7 +6892,7 @@ static void cp180Op90(Cpu180Context *activeCpu)  // 90  BRREQ      MIGDS 2-25
         {
         disp  = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
         nextP = (activeCpu->regP & RingSegMask) | ((activeCpu->regP + disp) & Mask32);
-        if (cpu180IsDebugTrap(activeCpu, DM_BI, nextP) == FALSE)
+        if (cpu180IsDebugTrapMutex(activeCpu, DM_BI, nextP) == FALSE)
             {
             activeCpu->nextP = nextP;
             }
@@ -6864,7 +6912,7 @@ static void cp180Op91(Cpu180Context *activeCpu)  // 91  BRRNE      MIGDS 2-25
         {
         disp  = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
         nextP = (activeCpu->regP & RingSegMask) | ((activeCpu->regP + disp) & Mask32);
-        if (cpu180IsDebugTrap(activeCpu, DM_BI, nextP) == FALSE)
+        if (cpu180IsDebugTrapMutex(activeCpu, DM_BI, nextP) == FALSE)
             {
             activeCpu->nextP = nextP;
             }
@@ -6884,7 +6932,7 @@ static void cp180Op92(Cpu180Context *activeCpu)  // 92  BRRGT      MIGDS 2-25
         {
         disp  = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
         nextP = (activeCpu->regP & RingSegMask) | ((activeCpu->regP + disp) & Mask32);
-        if (cpu180IsDebugTrap(activeCpu, DM_BI, nextP) == FALSE)
+        if (cpu180IsDebugTrapMutex(activeCpu, DM_BI, nextP) == FALSE)
             {
             activeCpu->nextP = nextP;
             }
@@ -6904,7 +6952,7 @@ static void cp180Op93(Cpu180Context *activeCpu)  // 93  BRRGE      MIGDS 2-25
         {
         disp  = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
         nextP = (activeCpu->regP & RingSegMask) | ((activeCpu->regP + disp) & Mask32);
-        if (cpu180IsDebugTrap(activeCpu, DM_BI, nextP) == FALSE)
+        if (cpu180IsDebugTrapMutex(activeCpu, DM_BI, nextP) == FALSE)
             {
             activeCpu->nextP = nextP;
             }
@@ -6924,7 +6972,7 @@ static void cp180Op94(Cpu180Context *activeCpu)  // 94  BRXEQ      MIGDS 2-25
         {
         disp  = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
         nextP = (activeCpu->regP & RingSegMask) | ((activeCpu->regP + disp) & Mask32);
-        if (cpu180IsDebugTrap(activeCpu, DM_BI, nextP) == FALSE)
+        if (cpu180IsDebugTrapMutex(activeCpu, DM_BI, nextP) == FALSE)
             {
             activeCpu->nextP = nextP;
             }
@@ -6944,7 +6992,7 @@ static void cp180Op95(Cpu180Context *activeCpu)  // 95  BRXNE      MIGDS 2-25
         {
         disp  = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
         nextP = (activeCpu->regP & RingSegMask) | ((activeCpu->regP + disp) & Mask32);
-        if (cpu180IsDebugTrap(activeCpu, DM_BI, nextP) == FALSE)
+        if (cpu180IsDebugTrapMutex(activeCpu, DM_BI, nextP) == FALSE)
             {
             activeCpu->nextP = nextP;
             }
@@ -6964,7 +7012,7 @@ static void cp180Op96(Cpu180Context *activeCpu)  // 96  BRXGT      MIGDS 2-25
         {
         disp  = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
         nextP = (activeCpu->regP & RingSegMask) | ((activeCpu->regP + disp) & Mask32);
-        if (cpu180IsDebugTrap(activeCpu, DM_BI, nextP) == FALSE)
+        if (cpu180IsDebugTrapMutex(activeCpu, DM_BI, nextP) == FALSE)
             {
             activeCpu->nextP = nextP;
             }
@@ -6984,7 +7032,7 @@ static void cp180Op97(Cpu180Context *activeCpu)  // 97  BRXGE      MIGDS 2-25
         {
         disp  = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
         nextP = (activeCpu->regP & RingSegMask) | ((activeCpu->regP + disp) & Mask32);
-        if (cpu180IsDebugTrap(activeCpu, DM_BI, nextP) == FALSE)
+        if (cpu180IsDebugTrapMutex(activeCpu, DM_BI, nextP) == FALSE)
             {
             activeCpu->nextP = nextP;
             }
@@ -7007,7 +7055,7 @@ static void cp180Op98(Cpu180Context *activeCpu)  // 98  BRFEQ      MIGDS 2-87
             {
             disp  = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
             nextP = (activeCpu->regP & RingSegMask) | ((activeCpu->regP + disp) & Mask32);
-            if (cpu180IsDebugTrap(activeCpu, DM_BI, nextP) == FALSE)
+            if (cpu180IsDebugTrapMutex(activeCpu, DM_BI, nextP) == FALSE)
                 {
                 activeCpu->nextP = nextP;
                 }
@@ -7031,7 +7079,7 @@ static void cp180Op99(Cpu180Context *activeCpu)  // 99  BRFNE      MIGDS 2-87
             {
             disp  = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
             nextP = (activeCpu->regP & RingSegMask) | ((activeCpu->regP + disp) & Mask32);
-            if (cpu180IsDebugTrap(activeCpu, DM_BI, nextP) == FALSE)
+            if (cpu180IsDebugTrapMutex(activeCpu, DM_BI, nextP) == FALSE)
                 {
                 activeCpu->nextP = nextP;
                 }
@@ -7055,7 +7103,7 @@ static void cp180Op9A(Cpu180Context *activeCpu)  // 9A  BRFGT      MIGDS 2-87
             {
             disp  = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
             nextP = (activeCpu->regP & RingSegMask) | ((activeCpu->regP + disp) & Mask32);
-            if (cpu180IsDebugTrap(activeCpu, DM_BI, nextP) == FALSE)
+            if (cpu180IsDebugTrapMutex(activeCpu, DM_BI, nextP) == FALSE)
                 {
                 activeCpu->nextP = nextP;
                 }
@@ -7079,7 +7127,7 @@ static void cp180Op9B(Cpu180Context *activeCpu)  // 9B  BRFGE      MIGDS 2-87
             {
             disp  = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
             nextP = (activeCpu->regP & RingSegMask) | ((activeCpu->regP + disp) & Mask32);
-            if (cpu180IsDebugTrap(activeCpu, DM_BI, nextP) == FALSE)
+            if (cpu180IsDebugTrapMutex(activeCpu, DM_BI, nextP) == FALSE)
                 {
                 activeCpu->nextP = nextP;
                 }
@@ -7098,7 +7146,7 @@ static void cp180Op9C(Cpu180Context *activeCpu)  // 9C  BRINC      MIGDS 2-26
         {
         disp  = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
         nextP = (activeCpu->regP & RingSegMask) | ((activeCpu->regP + disp) & Mask32);
-        if (cpu180IsDebugTrap(activeCpu, DM_BI, nextP) == FALSE)
+        if (cpu180IsDebugTrapMutex(activeCpu, DM_BI, nextP) == FALSE)
             {
             activeCpu->nextP                 = nextP;
             activeCpu->regX[activeCpu->opK] += 1;
@@ -7121,7 +7169,7 @@ static void cp180Op9D(Cpu180Context *activeCpu)  // 9D  BRSEG      MIGDS 2-26
         {
         disp  = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
         nextP = (activeCpu->regP & RingSegMask) | ((activeCpu->regP + disp) & Mask32);
-        if (cpu180IsDebugTrap(activeCpu, DM_BI, nextP) == FALSE)
+        if (cpu180IsDebugTrapMutex(activeCpu, DM_BI, nextP) == FALSE)
             {
             activeCpu->nextP = nextP;
             }
@@ -7157,19 +7205,19 @@ static void cp180Op9E(Cpu180Context *activeCpu)  // 9E  BR---      MIGDS 2-88
     switch (activeCpu->opJ & Mask2)
         {
     case 0:  // Exponent Overflow
-        if (exponent >= 0x5000 && exponent <= 0x6fff && cpu180IsDebugTrap(activeCpu, DM_BI, brExit) == FALSE)
+        if (exponent >= 0x5000 && exponent <= 0x6fff && cpu180IsDebugTrapMutex(activeCpu, DM_BI, brExit) == FALSE)
             {
             activeCpu->nextP = brExit;
             }
         break;
     case 1:  // Exponent Underflow
-        if (exponent >= 0x0000 && exponent <= 0x2fff && cpu180IsDebugTrap(activeCpu, DM_BI, brExit) == FALSE)
+        if (exponent >= 0x0000 && exponent <= 0x2fff && cpu180IsDebugTrapMutex(activeCpu, DM_BI, brExit) == FALSE)
             {
             activeCpu->nextP = brExit;
             }
         break;
     default: // Indefinite
-        if (exponent >= 0x7000 && exponent <= 0x7fff && cpu180IsDebugTrap(activeCpu, DM_BI, brExit) == FALSE)
+        if (exponent >= 0x7000 && exponent <= 0x7fff && cpu180IsDebugTrapMutex(activeCpu, DM_BI, brExit) == FALSE)
             {
             activeCpu->nextP = brExit;
             }
@@ -7196,7 +7244,7 @@ static void cp180Op9F(Cpu180Context *activeCpu)  // 9F  BRCR       MIGDS 2-142
             cpu180SetMonitorCondition(activeCpu, MCR51); // Instruction specfication error
             return;
             }
-        if ((activeCpu->regMcr & mask) != 0 && cpu180IsDebugTrap(activeCpu, DM_BI, brExit) == FALSE)
+        if ((activeCpu->regMcr & mask) != 0 && cpu180IsDebugTrapMutex(activeCpu, DM_BI, brExit) == FALSE)
             {
             activeCpu->regMcr &= ~mask;
             activeCpu->nextP   = brExit;
@@ -7208,7 +7256,7 @@ static void cp180Op9F(Cpu180Context *activeCpu)  // 9F  BRCR       MIGDS 2-142
             cpu180SetMonitorCondition(activeCpu, MCR51); // Instruction specfication error
             return;
             }
-        if ((activeCpu->regMcr & mask) == 0 && cpu180IsDebugTrap(activeCpu, DM_BI, brExit) == FALSE)
+        if ((activeCpu->regMcr & mask) == 0 && cpu180IsDebugTrapMutex(activeCpu, DM_BI, brExit) == FALSE)
             {
             activeCpu->regMcr |= mask;
             activeCpu->regP    = brExit;
@@ -7216,26 +7264,26 @@ static void cp180Op9F(Cpu180Context *activeCpu)  // 9F  BRCR       MIGDS 2-142
             }
         break;
     case 2:
-        if ((activeCpu->regMcr & mask) != 0 && cpu180IsDebugTrap(activeCpu, DM_BI, brExit) == FALSE)
+        if ((activeCpu->regMcr & mask) != 0 && cpu180IsDebugTrapMutex(activeCpu, DM_BI, brExit) == FALSE)
             {
             activeCpu->nextP = brExit;
             }
         break;
     case 3:
-        if ((activeCpu->regMcr & mask) == 0 && cpu180IsDebugTrap(activeCpu, DM_BI, brExit) == FALSE)
+        if ((activeCpu->regMcr & mask) == 0 && cpu180IsDebugTrapMutex(activeCpu, DM_BI, brExit) == FALSE)
             {
             activeCpu->nextP = brExit;
             }
         break;
     case 4:
-        if ((activeCpu->regUcr & mask) != 0 && cpu180IsDebugTrap(activeCpu, DM_BI, brExit) == FALSE)
+        if ((activeCpu->regUcr & mask) != 0 && cpu180IsDebugTrapMutex(activeCpu, DM_BI, brExit) == FALSE)
             {
             activeCpu->regUcr &= ~mask;
             activeCpu->nextP   = brExit;
             }
         break;
     case 5:
-        if ((activeCpu->regUcr & mask) == 0 && cpu180IsDebugTrap(activeCpu, DM_BI, brExit) == FALSE)
+        if ((activeCpu->regUcr & mask) == 0 && cpu180IsDebugTrapMutex(activeCpu, DM_BI, brExit) == FALSE)
             {
             activeCpu->regUcr |= mask;
             activeCpu->regP  = brExit;
@@ -7243,13 +7291,13 @@ static void cp180Op9F(Cpu180Context *activeCpu)  // 9F  BRCR       MIGDS 2-142
             }
         break;
     case 6:
-        if ((activeCpu->regUcr & mask) != 0 && cpu180IsDebugTrap(activeCpu, DM_BI, brExit) == FALSE)
+        if ((activeCpu->regUcr & mask) != 0 && cpu180IsDebugTrapMutex(activeCpu, DM_BI, brExit) == FALSE)
             {
             activeCpu->nextP = brExit;
             }
         break;
     case 7:
-        if ((activeCpu->regUcr & mask) == 0 && cpu180IsDebugTrap(activeCpu, DM_BI, brExit) == FALSE)
+        if ((activeCpu->regUcr & mask) == 0 && cpu180IsDebugTrapMutex(activeCpu, DM_BI, brExit) == FALSE)
             {
             activeCpu->nextP = brExit;
             }
@@ -7317,9 +7365,7 @@ static void cp180OpA1(Cpu180Context *activeCpu)  // A1  SAI        MIGDS 2-15
     pva = (Aj & RingSegMask) | byteNum;
     if (cpu180IsDebugTrap(activeCpu, DM_DW, pva) == FALSE)
         {
-        cpuAcquireMemoryMutex();
         (void)cpu180PutBytes(activeCpu, pva, RingOf(pva), activeCpu->regA[activeCpu->opK], 6);
-        cpuReleaseMemoryMutex();
         }
     }
 
@@ -7385,9 +7431,7 @@ static void cp180OpA3(Cpu180Context *activeCpu)  // A3  SXI        MIGDS 2-12
         }
     else if (cpu180IsDebugTrap(activeCpu, DM_DW, pva) == FALSE)
         {
-        cpuAcquireMemoryMutex();
         cpMem[rma >> 3] = activeCpu->regX[activeCpu->opK];
-        cpuReleaseMemoryMutex();
 
 #if CcDebug > 0 && defined(TRACE_STORE_START)
         cpu180CheckTraceStore(activeCpu, pva, pva + 7);
@@ -7734,7 +7778,6 @@ static void cp180OpB4(Cpu180Context *activeCpu)  // B4  CMPXA      MIGDS 2-134
     disp     = ((activeCpu->opQ <= 0x7fff) ? (u32)activeCpu->opQ : 0x7fff0000 | (u32)activeCpu->opQ) << 1;
     Xk       = activeCpu->regX[activeCpu->opK];
     wordAddr = rma >> 3;
-    cpuAcquireMemoryMutex();
     word        = cpMem[wordAddr];
     cpMem[pti] |= (u64)2 << 60; // set page used bit
     if ((word & LeftMask) == LeftMask)
@@ -7763,7 +7806,6 @@ static void cp180OpB4(Cpu180Context *activeCpu)  // B4  CMPXA      MIGDS 2-134
             activeCpu->regX[1] = (activeCpu->regX[1] & LeftMask) | (u64)0xc0000000;
             }
         }
-    cpuReleaseMemoryMutex();
     }
 
 static void cp180OpB5(Cpu180Context *activeCpu)  // B5  CALLSEG    MIGDS 2-122
@@ -9285,9 +9327,7 @@ static void cp180OpSBYTS(Cpu180Context *activeCpu, u8 count)
     pva = (Aj & RingSegMask) | byteNum;
     if (cpu180IsDebugTrap(activeCpu, DM_DW, pva) == FALSE)
         {
-        cpuAcquireMemoryMutex();
         (void)cpu180PutBytes(activeCpu, pva, RingOf(pva), activeCpu->regX[activeCpu->opK], count);
-        cpuReleaseMemoryMutex();
         }
     }
 
