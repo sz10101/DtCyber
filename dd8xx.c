@@ -1309,6 +1309,12 @@ static FcStatus dd8xxFunc(PpWord funcCode)
         break;
 
     case Fc8xxIoLength:
+        /*
+        **  Expect number of sectors.
+        */
+        activeDevice->recordLength = 1;
+        break;
+
     case Fc8xxDisableReserve:
     case Fc8xxContinue:
     case Fc8xxGapWrite:
@@ -1755,9 +1761,19 @@ static void dd8xxIo(void)
             }
         break;
 
+    case Fc8xxIoLength:
+        if (activeChannel->full)
+            {
+            activeChannel->full = FALSE;
+            if (--activeDevice->recordLength == 0)
+                {
+                activeChannel->discAfterInput = TRUE;
+                }
+            }
+        break;
+
     case Fc8xxFormatPack:
     case Fc8xxManipulateProcessor:
-    case Fc8xxIoLength:
     case Fc8xxOpComplete:
     case Fc8xxDisableReserve:
     case Fc8xxContinue:
