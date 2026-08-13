@@ -480,7 +480,7 @@ static void cpu180SetTos(Cpu180Context *ctx, u16 ring, u64 pva);
 static void cpu180Store180Xp(Cpu180Context *ctx, u32 xpa);
 static bool cpu180SubInt32(Cpu180Context *ctx, u32 minend, u32 subend, u32 *diff);
 static bool cpu180SubInt64(Cpu180Context *ctx, u64 minend, u64 subend, u64 *diff);
-static void cpu180UpdatePageSize(Cpu180Context *ctx);
+static void cpu180UpdatePageTableParms(Cpu180Context *ctx);
 static bool cpu180ValidateAccess(Cpu180Context *ctx, u64 sde, u8 ring, Cpu180AccessMode access, MonitorCondition *cond);
 
 #if DEBUG
@@ -1533,7 +1533,7 @@ void cpu180Init(char *model, u16 *serialNumbers)
         activeCpu->pendingAction = Rni;
         activeCpu->isStopped     = TRUE;
         activeCpu->isMonitorMode = TRUE;
-        cpu180UpdatePageSize(activeCpu);
+        cpu180UpdatePageTableParms(activeCpu);
         printf("(cpu    ) CP%d EID " FMT32_08x "\n", activeCpu->id, activeCpu->regEid);
         }
 
@@ -2115,14 +2115,24 @@ void cpu180MacSetCpStateRegister(Cpu180Context *ctx, u8 reg, u64 word)
         break;
     case RegPageSizeMask:
         ctx->regPsm = word & Mask7;
-        cpu180UpdatePageSize(ctx);
+#if DEBUG && !DEBUG_SET_STATE_REG
+        fprintf(cpu180Log, "Set PSM CPU%d %02x\n", ctx->id, ctx->regPsm);
+#endif
+        cpu180UpdatePageTableParms(ctx);
         break;
     case RegPageTableAddr:
         ctx->regPta = (u32)(word & Mask32);
+#if DEBUG && !DEBUG_SET_STATE_REG
+        fprintf(cpu180Log, "Set PTA CPU%d " FMT32_08x "\n", ctx->id, ctx->regPta);
+#endif
+        cpu180UpdatePageTableParms(ctx);
         break;
     case RegPageTableLen:
         ctx->regPtl = (u8)(word & Mask8);
-        cpu180UpdatePageSize(ctx);
+#if DEBUG && !DEBUG_SET_STATE_REG
+        fprintf(cpu180Log, "Set PTL CPU%d %02x\n", ctx->id, ctx->regPtl);
+#endif
+        cpu180UpdatePageTableParms(ctx);
         break;
     case RegProcessIntTimer:
         ctx->regPit = (u32)(word & Mask32);
@@ -2222,20 +2232,11 @@ void cpu180MacStartCp(Cpu180Context *ctx)
     {
     u64  csAddr;
     u32  xpa;
-#if DEBUG
-    char *ds;
-#endif
 
     csAddr = cpu180MacGetCpStateRegister(ctx, RegCtrlStoreAddr);
 
 #if DEBUG
-    fprintf(cpu180Log, "\nStart CPU%d at CSA %04llx", ctx->id, csAddr);
-    ds = cpu180CsaToStr(csAddr);
-    if (*ds != '\0')
-        {
-        fprintf(cpu180Log, " (%s)", ds);
-        }
-    fputs("\n", cpu180Log);
+    fprintf(cpu180Log, "\nStart CPU%d at CSA %04llx (%s)\n", ctx->id, csAddr, cpu180CsaToStr(csAddr));
 #endif
 
     switch (csAddr)
@@ -4819,7 +4820,7 @@ static bool cpu180SubInt64(Cpu180Context *ctx, u64 minend, u64 subend, u64 *diff
     }
 
 /*--------------------------------------------------------------------------
-**  Purpose:        Update elements related to page size.
+**  Purpose:        Update elements related to page size and page table length
 **
 **  Parameters:     Name        Description.
 **                  ctx         pointer to CPU context to be updated
@@ -4827,7 +4828,7 @@ static bool cpu180SubInt64(Cpu180Context *ctx, u64 minend, u64 subend, u64 *diff
 **  Returns:        Nothing.
 **
 **------------------------------------------------------------------------*/
-static void cpu180UpdatePageSize(Cpu180Context *ctx)
+static void cpu180UpdatePageTableParms(Cpu180Context *ctx)
     {
     u32 entries;
     u8  i;
@@ -9713,7 +9714,7 @@ static char *cpu180CsaToStr(u64 csa)
     case CSA_HEIJ: return "half exchange-in job mode";
     case CSA_HEOM: return "half exchange-out";
     case CSA_INIT: return "long init";
-    default:       return "";
+    default:       return "unrecognized";
         }
     }
 
