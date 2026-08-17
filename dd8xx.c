@@ -1258,6 +1258,7 @@ static FcStatus dd8xxFunc(PpWord funcCode)
             break;
 
         case DiskType885:
+        case DiskType885Ls:
             dp->cylinder = DsCylinder885;
             dp->track    = DsTrack885;
             dp->sector   = DsSector885;
