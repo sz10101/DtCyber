@@ -303,7 +303,7 @@ promise = promise
 .then(() => dtc.expect([{ re: /Operator> $/ }]))
 .then(() => dtc.console("idle off"))
 .then(() => dtc.attachPrinter("LP5xx_C12_E5"))
-.then(() => dtc.say("Install CIP on disk ..."))
+.then(() => dtc.say("Install CIP on disk. This takes time, please wait ..."))
 .then(() => dtc.dsd([
   "#2000#B!",
   "#1000#I!",
@@ -311,7 +311,7 @@ promise = promise
   "#1000#",
   "#1000#"
 ]))
-.then(() => dtc.sleep(60000))
+.then(() => dtc.sleep(90000))
 .then(() => dtc.say("CIP installation complete"))
 .then(() => {
   dtc.isExitOnClose = false;
@@ -401,7 +401,7 @@ promise = promise
 .then(() => dtc.sleep(2))
 .then(() => dtc.dsd(`X.SETVE(WAIT,NVE,${utilities.getPropertyValue(utilities.getCustomProperties(dtc), "PASSWORDS", "NVE", "NVEX")},,T,,0)`))
 .then(() => dtc.say(""))
-.then(() => dtc.say("--- Upgrade to Cyber 870 complete ---""))
+.then(() => dtc.say("--- Upgrade to Cyber 870 complete ---"))
 .then(() => dtc.say(""))
 .then(() => dtc.say("Enter 'exit' command to exit and terminate system gracefully"))
 .then(() => dtc.engageOperator(cmdExtensions))
