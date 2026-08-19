@@ -121,6 +121,7 @@ class DtCyber {
   constructor() {
     this.streamMgrs     = {};
     this.iniMainSection = "cyber";
+    this.jobSeqNo       = 0;
   }
 
   /*
@@ -513,8 +514,9 @@ class DtCyber {
       if (typeof options.password === "string") password = options.password;
       if (typeof options.data     === "string") data     = options.data;
     }
-    const beginOutput = ` *** ${jobname} BEGIN OUTPUT ***`;
-    const endOutput   = ` *** ${jobname} END OUTPUT ***`;
+    me.jobSeqNo += 1;
+    const beginOutput = ` *** ${jobname}-${me.jobSeqNo} BEGIN OUTPUT ***`;
+    const endOutput   = ` *** ${jobname}-${me.jobSeqNo} END OUTPUT ***`;
     if (Array.isArray(body)) body = body.join("\n") + "\n";
     let job = `${jobname}.\n$USER,${username},${password}.\n`
       + `$NOTE,OUTPUT,NR./${beginOutput}\n`

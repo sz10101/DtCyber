@@ -16,11 +16,11 @@ const media = [
 ];
 
 const cmrdProps = [
-  "VE=70000."
+  "VE=67720."  // ~111 Mbytes
 ];
 
 const eqpdProps = [
-  "EQ005=DE,ET=EM,SZ=1000.",
+  "EQ005=DE,ET=EM,SZ=4000.",  // 2048K words UEM
   /*
   "EQ100=DQ,UN=0,CH=20,ST=DOWN.",
   "EQ101=DQ,UN=1,CH=22,ST=DOWN.",
@@ -190,8 +190,7 @@ promise = promise
 .then(() => dtc.say("Edit CMRD01 ..."))
 .then(() => utilities.getSystemRecord(dtc, "CMRD01"))
 .then(cmrd01 => {
-  const mid = utilities.getMachineId(dtc);
-  cmrdProps.push(`NAME=M${mid} - DUAL-STATE CYBER 870.`);
+  cmrdProps.push(`NAME=M${utilities.getMachineId(dtc)} - DUAL-STATE CYBER 870.`);
   cmrd01 = utilities.editCmrdProps(cmrd01, cmrdProps);
   productRecords.push(cmrd01);
   console.log(cmrd01);
@@ -199,6 +198,7 @@ promise = promise
 .then(() => dtc.say("Edit EQPD01 ..."))
 .then(() => utilities.getSystemRecord(dtc, "EQPD01"))
 .then(eqpd01 => {
+  eqpdProps.push(`XM=${utilities.getMachineId(dtc)},0,1000.`); // XM=<mid>,0,1000.  512K words of user EM
   eqpd01 = utilities.editEqpdProps(eqpd01, eqpdProps);
   //
   //  Remove equipment definitions related to ECS/ESM and two-port mux

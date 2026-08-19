@@ -56,6 +56,122 @@ const utilities = {
     .then(() => dtc.createJobWithOutput(12, 4, job, options));
   },
 
+  editCmrdProps: (cmrDeck, props) => {
+    for (const prop of props) {
+      let ei = prop.indexOf("=");
+      if (ei < 0) {
+        throw new Error(`Invalid CMRDECK definition: \"${prop}\"`);
+      }
+      let key   = prop.substring(0, ei).trim().toUpperCase();
+      let value = prop.substring(ei + 1).trim().toUpperCase();
+      if (value.endsWith(".")) value = value.substring(0, value.length - 1).trim();
+      let si = 0;
+      while (si < cmrDeck.length) {
+        let ni = cmrDeck.indexOf("\n", si);
+        if (ni < 0) ni = cmrDeck.length - 1;
+        let ei = cmrDeck.indexOf("=", si);
+        if (ei < ni && ei > 0 && cmrDeck.substring(si, ei).trim() === key) {
+          if (value !== "") {
+            cmrDeck = `${cmrDeck.substring(0, si)}${key}=${value}.\n${cmrDeck.substring(ni + 1)}`;
+          }
+          else {
+            cmrDeck = `${cmrDeck.substring(0, si)}${cmrDeck.substring(ni + 1)}`;
+          }
+          break;
+        }
+        si = ni + 1;
+      }
+      if (si >= cmrDeck.length) {
+        cmrDeck += `${key}=${value}.\n`;
+      }
+    }
+    return cmrDeck;
+  },
+
+  editEqpdProps: (eqpDeck, props) => {
+    for (const prop of props) {
+      let ei = prop.indexOf("=");
+      if (ei < 0) {
+        ei = prop.indexOf(",");
+        if (ei < 0) {
+          ei = prop.indexOf(".");
+          if (ei < 0) {
+            throw new Error(`Invalid EQPDECK definition: \"${prop}\"`);
+          }
+        }
+      }
+      let key   = prop.substring(0, ei).trim().toUpperCase();
+      let value = prop.substring(ei + 1).trim().toUpperCase();
+      let si = 0;
+      let isEQyet = false;
+      let isPFyet = false;
+      while (si < eqpDeck.length) {
+        let ni = eqpDeck.indexOf("\n", si);
+        if (ni < 0) ni = eqpDeck.length - 1;
+        let ei = eqpDeck.indexOf("=", si);
+        if (ei < ni && ei > 0) {
+          let eqpdKey = eqpDeck.substring(si, ei).trim();
+          if (eqpdKey.startsWith("EQ")) {
+            isEQyet = true;
+          }
+          else if (eqpdKey === "PF") {
+            isPFyet = true;
+          }
+          if (eqpdKey === key) {
+            if (key === "PF") {
+              let ci = value.indexOf(",");
+              if (ci < 0) {
+                throw new Error(`Invalid EQPDECK definition: \"${prop}\"`);
+              }
+              let propPFN = parseInt(value.substring(0, ci).trim());
+              ci = eqpDeck.indexOf(",", ei + 1);
+              let eqpdPFN = parseInt(eqpDeck.substring(ei + 1, ci).trim());
+              if (propPFN === eqpdPFN) {
+                eqpDeck = `${eqpDeck.substring(0, si)}${key}=${value}\n${eqpDeck.substring(ni + 1)}`;
+                break;
+              }
+              else if (propPFN < eqpdPFN) {
+                eqpDeck = `${eqpDeck.substring(0, si)}${key}=${value}\n${eqpDeck.substring(si)}`;
+                break;
+              }
+            }
+            else if (value === "" || value === ".") {
+              eqpDeck = `${eqpDeck.substring(0, si)}${eqpDeck.substring(ni + 1)}`;
+              break;
+            }
+            else {
+              eqpDeck = `${eqpDeck.substring(0, si)}${key}=${value}\n${eqpDeck.substring(ni + 1)}`;
+              break;
+            }
+          }
+          else if (isEQyet && key.startsWith("EQ") && !eqpdKey.startsWith("*")) {
+            if (!eqpdKey.startsWith("EQ")
+                || parseInt(key.substring(2)) < parseInt(eqpdKey.substring(2))) {
+              eqpDeck = `${eqpDeck.substring(0, si)}${key}=${value}\n${eqpDeck.substring(si)}`;
+              break;
+            }
+          }
+          else if (isPFyet && key === "PF" && !eqpdKey.startsWith("*") && eqpdKey !== "REMOVE") {
+            eqpDeck = `${eqpDeck.substring(0, si)}${key}=${value}\n${eqpDeck.substring(si)}`;
+            break;
+          }
+        }
+        else {
+          let eqpdProp = eqpDeck.substring(si, ni);
+          if (eqpdProp.startsWith(key)) {
+            eqpDeck = `${eqpDeck.substring(0, si)}${prop.toUpperCase()}\n${eqpDeck.substring(ni + 1)}`;
+            break;
+          }
+        }
+        si = ni + 1;
+      }
+      if (si >= eqpDeck.length) {
+        eqpDeck += `${prop.toUpperCase()}\n`;
+      }
+    }
+    return eqpDeck;
+  },
+
   enableSubsystem: (dtc, name, cp) => {
     const job = [
       "$ATTACH,PRODUCT/WB.",
@@ -555,7 +671,7 @@ const utilities = {
       "$COPYSBF,REC."
     ];
     if (typeof options === "undefined") options = {};
-    options.jobname = "GTRSYS";
+    if (typeof options.jobname === "undefined") options.jobname = rid;
     if (typeof options.username === "undefined" && typeof options.user === "undefined") {
       options.username = "INSTALL";
       options.password = utilities.getPropertyValue(utilities.getCustomProperties(dtc), "PASSWORDS", "INSTALL", "INSTALL");
@@ -730,6 +846,31 @@ const utilities = {
     delete utilities.tlfTopology;
   },
 
+  putPropertyValue: (propertyObject, sectionName, propertyName, propertyValue) => {
+    const ucPropName = propertyName.toUpperCase();
+    let propList = [];
+    if (typeof propertyObject[sectionName] === "undefined") {
+      propertyObject[sectionName] = [];
+    }
+    let found = false;
+    for (const line of propertyObject[sectionName]) {
+      let ei = line.indexOf("=");
+      if (ei === -1) continue;
+      let key = line.substring(0, ei).trim().toUpperCase();
+      if (key === ucPropName) {
+        propList.push(`${propertyName}=${propertyValue}`);
+        found = true;
+      }
+      else {
+        propList.push(line);
+      }
+    }
+    if (!found) {
+      propList.push(`${propertyName}=${propertyValue}`);
+    }
+    propertyObject[sectionName] = propList;
+  },
+
   reportProgress: (byteCount, contentLength, maxProgressLen) => {
     let progress = `\r${new Date().toLocaleTimeString()}   Received ${byteCount}`;
     if (contentLength === -1) {
@@ -765,7 +906,51 @@ const utilities = {
     };
     return dtc.createJobWithOutput(12, 4, job, options)
     .then(() => dtc.say("NDL updated"));
+  },
+
+  updateProductRecords: (dtc, productRecords) => {
+    const job = [
+      "$SETTL,*.",
+      "$SETJSL,*.",
+      "$SETASL,*.",
+      "$ATTACH,PRODUCT/M=W,WB.",
+      "$COPY,INPUT,LGO.",
+      "$LIBEDIT,P=PRODUCT,B=LGO,I=0,LO=EM,C."
+    ];
+    const options = {
+      jobname: "UPDPROD",
+      username: "INSTALL",
+      password: utilities.getPropertyValue(utilities.getCustomProperties(dtc), "PASSWORDS", "INSTALL", "INSTALL"),
+      data:    `${productRecords.join("~eor\n")}`
+    };
+    return dtc.say("Update PRODUCT ...")
+    .then(() => dtc.createJobWithOutput(12, 4, job, options))
+    .then(output => {
+      let promise = Promise.resolve();
+      for (const line of output.split("\n")) {
+        promise = promise
+        .then(() => dtc.say(`${new Date().toLocaleTimeString()}   ${line}`));
+      }
+      return promise;
+    });
+  },
+
+  writePropertyFile: (pathname, props) => {
+    if (typeof pathname !== "string") {
+      props = pathname;
+      pathname = "site.cfg";
+    }
+    let lines = [];
+    for (const sectionKey of Object.keys(props)) {
+      let propList = props[sectionKey];
+      lines.push(`[${sectionKey}]`);
+      for (const line of propList) {
+        lines.push(line);
+      }
+    }
+    fs.writeFileSync(pathname, lines.join("\n") + "\n");
   }
+
 };
 
 module.exports = utilities;

@@ -140,74 +140,8 @@ const processEqpdProps = () => {
       //
       //  Edit equipment deck to include new/updated entries
       //
-      
       if (typeof customProps["EQPDECK"] !== "undefined") {
-        for (const prop of customProps["EQPDECK"]) {
-          let ei = prop.indexOf("=");
-          if (ei < 0) {
-            ei = prop.indexOf(",");
-            if (ei < 0) {
-              throw new Error(`Invalid EQPDECK definition: \"${prop}\"`);
-            }
-          }
-          let key   = prop.substring(0, ei).trim().toUpperCase();
-          let value = prop.substring(ei + 1).trim().toUpperCase();
-          let si = 0;
-          let isEQyet = false;
-          let isPFyet = false;
-          while (si < eqpd01.length) {
-            let ni = eqpd01.indexOf("\n", si);
-            if (ni < 0) ni = eqpd01.length - 1;
-            let ei = eqpd01.indexOf("=", si);
-            if (ei < ni && ei > 0) {
-              let eqpdKey = eqpd01.substring(si, ei).trim();
-              if (eqpdKey.startsWith("EQ")) {
-                isEQyet = true;
-              }
-              else if (eqpdKey === "PF") {
-                isPFyet = true;
-              }
-              if (eqpdKey === key) {
-                if (key === "PF") {
-                  let ci = value.indexOf(",");
-                  if (ci < 0) {
-                    throw new Error(`Invalid EQPDECK definition: \"${prop}\"`);
-                  }
-                  let propPFN = parseInt(value.substring(0, ci).trim());
-                  ci = eqpd01.indexOf(",", ei + 1);
-                  let eqpdPFN = parseInt(eqpd01.substring(ei + 1, ci).trim());
-                  if (propPFN === eqpdPFN) {
-                    eqpd01 = `${eqpd01.substring(0, si)}${key}=${value}\n${eqpd01.substring(ni + 1)}`;
-                    break;
-                  }
-                  else if (propPFN < eqpdPFN) {
-                    eqpd01 = `${eqpd01.substring(0, si)}${key}=${value}\n${eqpd01.substring(si)}`;
-                    break;
-                  }
-                }
-                else {
-                  eqpd01 = `${eqpd01.substring(0, si)}${key}=${value}\n${eqpd01.substring(ni + 1)}`;
-                  break;
-                }
-              }
-              else if (isEQyet && key.startsWith("EQ") && !eqpdKey.startsWith("*")) {
-                if (!eqpdKey.startsWith("EQ")
-                    || parseInt(key.substring(2)) < parseInt(eqpdKey.substring(2))) {
-                  eqpd01 = `${eqpd01.substring(0, si)}${key}=${value}\n${eqpd01.substring(si)}`;
-                  break;
-                }
-              }
-              else if (isPFyet && key === "PF" && !eqpdKey.startsWith("*") && eqpdKey !== "REMOVE") {
-                eqpd01 = `${eqpd01.substring(0, si)}${key}=${value}\n${eqpd01.substring(si)}`;
-                break;
-              }
-            }
-            si = ni + 1;
-          }
-          if (si >= eqpd01.length) {
-            eqpd01 += `${prop.toUpperCase()}\n`;
-          }
-        }
+        eqpd01 = utilities.editEqpdProps(eqpd01, customProps["EQPDECK"]);
       }
       productRecords.push(eqpd01);
       return Promise.resolve();
@@ -407,33 +341,7 @@ const updateLIDCMxx = () => {
  *  A promise that is resolved when the PRODUCT file has been updated.
  */
 const updateProductRecords = () => {
-  if (productRecords.length > 0) {
-    const job = [
-      "$SETTL,*.",
-      "$SETJSL,*.",
-      "$SETASL,*.",
-      "$ATTACH,PRODUCT/M=W,WB.",
-      "$COPY,INPUT,LGO.",
-      "$LIBEDIT,P=PRODUCT,B=LGO,I=0,LO=EM,C."
-    ];
-    const options = {
-      jobname: "UPDPROD",
-      username: "INSTALL",
-      password: utilities.getPropertyValue(customProps, "PASSWORDS", "INSTALL", "INSTALL"),
-      data:    `${productRecords.join("~eor\n")}`
-    };
-    return dtc.say("Update PRODUCT ...")
-    .then(() => dtc.createJobWithOutput(12, 4, job, options))
-    .then(output => {
-      for (const line of output.split("\n")) {
-        console.log(`${new Date().toLocaleTimeString()}   ${line}`);
-      }
-      return Promise.resolve();
-    });
-  }
-  else {
-    return Promise.resolve();
-  }
+  return (productRecords.length > 0) ? utilities.updateProductRecords(dtc, productRecords) : Promise.resolve();
 };
 
 /*
