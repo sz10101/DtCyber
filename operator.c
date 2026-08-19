@@ -1914,7 +1914,7 @@ static void opHelpDumpMemory(void)
 **
 **------------------------------------------------------------------------*/
 char opKeyIn           = 0;
-u32  opKeyInterval     = 250;
+u32  opKeyInterval     = 150;
 u32  opKeyWaitInterval = 100;
 
 static void opCmdEnterKeys(bool help, char *cmdParams)
@@ -1926,6 +1926,7 @@ static void opCmdEnterKeys(bool help, char *cmdParams)
     char      *kp;
     char      *limit;
     u32       msec;
+    bool      savedIdle;
     char      timestamp[20];
     struct tm *tmp;
 
@@ -2026,6 +2027,8 @@ static void opCmdEnterKeys(bool help, char *cmdParams)
      *    # - delimit a milliseconds value (e.g., #500#) and pause for
      *        the speccified amount of time
      */
+    savedIdle = idle;   // temporarily disable CPU idle checking
+    idle      = FALSE;
     opWaitKeyConsume(); // just in case
     cp = keybuf;
     while (*cp != '\0' && *cp != '!')
@@ -2070,6 +2073,7 @@ static void opCmdEnterKeys(bool help, char *cmdParams)
         opKeyIn = '\r';
         opWaitKeyConsume();
         }
+    idle = savedIdle;
     }
 
 static void opHelpEnterKeys(void)
@@ -2092,9 +2096,19 @@ static void opHelpEnterKeys(void)
 
 static void opWaitKeyConsume()
     {
+    u64 currentTime;
+    u64 nextTime;
+
     while (opKeyIn != 0)
         {
         sleepMsec(opKeyWaitInterval);
+        }
+    currentTime = getMilliseconds();
+    nextTime    = currentTime + opKeyInterval;
+    while (currentTime < nextTime)
+        {
+        sleepMsec((u32)(nextTime - currentTime));
+        currentTime = getMilliseconds();
         }
     }
 

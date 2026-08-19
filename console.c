@@ -488,8 +488,6 @@ static FcStatus consoleFunc(PpWord funcCode)
         consoleAcceptConnection();
         }
 
-    activeChannel->full = FALSE;
-
     switch (funcCode)
         {
     default:
@@ -630,19 +628,22 @@ static void consoleIo(void)
 
     case Fc6612SelKeyIn:
         consoleCheckDisplayCycle();
-        activeChannel->data   = 0;
-        activeChannel->full   = TRUE;
-        activeChannel->status = 0;
-        activeDevice->fcode   = 0;
-        if (ppKeyIn != 0)
+        if (activeChannel->full == FALSE)
             {
-            activeChannel->data = asciiToConsole[(u8)ppKeyIn];
-            ppKeyIn             = 0;
-            }
-        else if (opKeyIn != 0)
-            {
-            activeChannel->data = asciiToConsole[(u8)opKeyIn];
-            opKeyIn             = 0;
+            activeChannel->data   = 0;
+            activeChannel->full   = TRUE;
+            activeChannel->status = 0;
+            activeDevice->fcode   = 0;
+            if (ppKeyIn != 0)
+                {
+                activeChannel->data = asciiToConsole[(u8)ppKeyIn];
+                ppKeyIn             = 0;
+                }
+            else if (opKeyIn != 0)
+                {
+                activeChannel->data = asciiToConsole[(u8)opKeyIn];
+                opKeyIn             = 0;
+                }
             }
         break;
         }
